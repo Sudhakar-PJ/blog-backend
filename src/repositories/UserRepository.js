@@ -181,6 +181,11 @@ class UserRepository {
     return res.rows[0];
   }
 
+  async updateGoogleId(userId, googleId) {
+    const res = await query(`UPDATE users SET google_id = $1 WHERE id = $2 RETURNING *`, [googleId, userId]);
+    return res.rows[0];
+  }
+
   async incrementFailedAttempts(userId) {
     const res = await query(
       `UPDATE users SET failed_attempts = failed_attempts + 1 WHERE id = $1 RETURNING failed_attempts`,

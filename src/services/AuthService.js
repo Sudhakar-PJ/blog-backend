@@ -145,8 +145,8 @@ class AuthService {
       user = await UserRepository.findByEmail(profile.emails[0].value);
       if (user) {
         // Link google ID to existing account
-        // Wait, for simplicity, normally we might want to update the DB, but UserRepository needs a method
-        // Assume user linking or creating new
+        await UserRepository.updateGoogleId(user.id, profile.id);
+        user.google_id = profile.id;
       } else {
         const displayName = profile.displayName || profile.emails[0].value.split("@")[0];
         let finalizedUsername = displayName;
