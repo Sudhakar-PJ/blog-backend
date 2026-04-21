@@ -146,7 +146,11 @@ const logger = winston.createLogger({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.printf(
-          (info) => `[${info.timestamp}] [${info.requestId || 'system'}] ${info.level}: ${info.message}${info.stack ? '\n' + info.stack : ''}`
+          (info) => {
+            const { timestamp, requestId, level, message, stack, ...meta } = info;
+            const metaStr = Object.keys(meta).length ? ` | ${JSON.stringify(meta)}` : '';
+            return `[${timestamp}] [${requestId || 'system'}] ${level}: ${message}${metaStr}${stack ? '\n' + stack : ''}`;
+          }
         )
       )
     }),
