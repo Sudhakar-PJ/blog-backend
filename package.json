@@ -1,0 +1,54 @@
+{
+  "name": "blog-backend",
+  "version": "1.0.0",
+  "description": "Backend for a full-stack blog application with advanced roles and AI features",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "cross-env NODE_ENV=test jest --runInBand"
+  },
+  "keywords": [
+    "blog",
+    "express",
+    "postgres",
+    "redis"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "latest",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "argon2": "^0.44.0",
+    "bullmq": "^5.73.0",
+    "cloudinary": "^2.5.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "hpp": "^0.2.3",
+    "ioredis": "^5.10.1",
+    "joi": "^18.1.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.10.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "pg": "^8.11.5",
+    "rate-limit-redis": "^4.3.1",
+    "socket.io": "^4.8.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "twilio": "^5.4.3",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "jest": "^30.3.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.2.2"
+  }
+}
