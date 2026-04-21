@@ -154,8 +154,8 @@ const logger = winston.createLogger({
         )
       )
     }),
-    new PostgresTransport(),
-    new RedisTransport()
+    new PostgresTransport()
+    // RedisTransport disabled to preserve free-tier request limits
   ]
 });
 
