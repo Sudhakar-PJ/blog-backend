@@ -13,6 +13,10 @@ const options = {
     },
     servers: [
       {
+        url: 'https://blog-backend-wgoy.onrender.com',
+        description: 'Production Server',
+      },
+      {
         url: 'http://localhost:5000',
         description: 'Development Server',
       },
