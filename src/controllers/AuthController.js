@@ -222,8 +222,12 @@ class AuthController {
       const deviceId = req.cookies?.deviceId;
       const allDevices = req.body?.allDevices === true;
 
-      if (deviceId) {
-        await AuthService.logout(req.user.id, deviceId, allDevices);
+      if (deviceId && req.user) {
+        if (allDevices) {
+          await AuthService.logoutAllDevices(req.user.id);
+        } else {
+          await AuthService.logout(req.user.id, deviceId);
+        }
       }
 
       // Explicitly clear cookies with production-grade attributes

@@ -248,6 +248,11 @@ class AuthService {
     return { user: this.sanitizeUser(user), accessToken, refreshToken };
   }
 
+  async logout(userId, deviceId) {
+    if (!userId || !deviceId) return;
+    await redisClient.del(`refresh_token:${userId}:${deviceId}`);
+  }
+
   async logoutAllDevices(userId) {
     // Attempt scan/keys to delete all refresh tokens for this user
     try {

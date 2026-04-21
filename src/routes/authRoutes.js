@@ -5,6 +5,7 @@ const { authLimiter } = require('../middlewares/rateLimit');
 const { honeypot } = require('../middlewares/botProtection');
 const validate = require('../middlewares/validate');
 const authValidation = require('../validations/authValidation');
+const { authenticate } = require('../middlewares/authMiddleware');
 
 const passport = require('passport');
 
@@ -146,7 +147,7 @@ router.post('/refresh', AuthController.refresh);
  *       200:
  *         description: Logged out
  */
-router.post('/logout', AuthController.logout);
+router.post('/logout', authenticate, AuthController.logout);
 
 // Google OAuth routes
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
@@ -174,7 +175,6 @@ router.post('/google/exchange', AuthController.googleExchange);
  *       200:
  *         description: User profile data
  */
-const { authenticate } = require('../middlewares/authMiddleware');
 router.get('/me', authenticate, AuthController.me);
 
 module.exports = router;
