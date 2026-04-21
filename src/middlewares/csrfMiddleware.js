@@ -21,8 +21,9 @@ const csrfProtection = (req, res, next) => {
     csrfToken = crypto.randomBytes(32).toString('hex');
       res.cookie('csrf-token', csrfToken, {
         httpOnly: false, // Must be readable by frontend JS
-        secure: true, // Always true for SameSite=None
+        secure: true,
         sameSite: 'none',
+        partitioned: true,
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
   }
