@@ -27,8 +27,8 @@ class AuthController {
     if (accessToken) {
       res.cookie('accessToken', accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+        secure: true,
+        sameSite: 'none',
         maxAge: 15 * 60 * 1000 // 15 mins
       });
     }
@@ -36,8 +36,8 @@ class AuthController {
     if (refreshToken) {
       res.cookie('refreshToken', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+        secure: true,
+        sameSite: 'none',
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
     }
@@ -45,8 +45,8 @@ class AuthController {
     if (deviceId) {
       res.cookie('deviceId', deviceId, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+        secure: true,
+        sameSite: 'none',
         maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
       });
     }
@@ -147,7 +147,8 @@ class AuthController {
       const { user, accessToken, refreshToken, deviceId } = req.user;
       this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
       // Redirect to frontend upon success
-      res.redirect('http://localhost:5173/feed');
+      const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/feed`);
     } catch (error) {
       next(error);
     }

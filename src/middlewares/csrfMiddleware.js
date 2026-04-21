@@ -19,12 +19,12 @@ const csrfProtection = (req, res, next) => {
   
   if (!csrfToken) {
     csrfToken = crypto.randomBytes(32).toString('hex');
-    res.cookie('csrf-token', csrfToken, {
-      httpOnly: false, // Must be readable by frontend JS
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 1 day
-    });
+      res.cookie('csrf-token', csrfToken, {
+        httpOnly: false, // Must be readable by frontend JS
+        secure: true, // Always true for SameSite=None
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+      });
   }
 
   // 2. Protect mutation methods
