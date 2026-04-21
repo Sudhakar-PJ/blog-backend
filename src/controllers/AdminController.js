@@ -9,8 +9,10 @@ class AdminController {
       const page = Math.max(parseInt(req.query.page) || 1, 1);
       const limit = Math.min(parseInt(req.query.limit) || 20, 100);
       const q = req.query.q || '';
+      const role = req.query.role || '';
+      const isSuspended = req.query.isSuspended || null;
       
-      const data = await UserService.getAllUsers(page, limit, q);
+      const data = await UserService.getAllUsers(page, limit, q, role, isSuspended);
       return ApiResponse.success(res, { 
         users: data.users, 
         total: data.total, 

@@ -213,8 +213,8 @@ class UserService {
     }
   }
 
-  async getAllUsers(page, limit, q) {
-    return await UserRepository.getAllUsers(page, limit, q);
+  async getAllUsers(page, limit, q, role, isSuspended) {
+    return await UserRepository.getAllUsers(page, limit, q, role, isSuspended);
   }
 
   async searchBloggers(currentUserId, q, limit, page) {

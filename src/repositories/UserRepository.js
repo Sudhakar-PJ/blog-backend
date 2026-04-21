@@ -89,7 +89,7 @@ class UserRepository {
     return res.rows[0];
   }
 
-  async getAllUsers(page = 1, limit = 20, q = '') {
+  async getAllUsers(page = 1, limit = 20, q = '', role = '', isSuspended = null) {
     const offset = (page - 1) * limit;
     let sql = `
       SELECT id, email, username, role, full_name, is_email_verified, two_step_enabled, is_suspended, suspension_reason, is_deactivated, created_at 
@@ -97,11 +97,27 @@ class UserRepository {
     `;
     let countSql = `SELECT COUNT(*) FROM users`;
     const params = [];
-    
+    const conditions = [];
+
     if (q.trim() !== '') {
-      sql += ` WHERE username ILIKE $1 OR email ILIKE $1 OR full_name ILIKE $1 `;
-      countSql += ` WHERE username ILIKE $1 OR email ILIKE $1 OR full_name ILIKE $1`;
       params.push(`%${q.trim()}%`);
+      conditions.push(`(username ILIKE $${params.length} OR email ILIKE $${params.length} OR full_name ILIKE $${params.length})`);
+    }
+
+    if (role && role !== 'all') {
+      params.push(role);
+      conditions.push(`role = $${params.length}`);
+    }
+
+    if (isSuspended !== null && isSuspended !== '') {
+      params.push(isSuspended === 'true');
+      conditions.push(`is_suspended = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      const whereClause = ' WHERE ' + conditions.join(' AND ');
+      sql += whereClause;
+      countSql += whereClause;
     }
 
     sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
