@@ -37,10 +37,10 @@ const csrfProtection = (req, res, next) => {
       // Security Auditing: Log the failure for admin visibility
       logger.warn(`[SEC_CSRF_FAILURE] ${req.method} ${req.originalUrl}`, {
         ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        userId: req.user?.id || 'anonymous',
         hasHeader: !!headerToken,
-        hasCookie: !!csrfToken
+        hasCookieInRequest: !!req.cookies['csrf-token'],
+        cookieInRequestValue: req.cookies['csrf-token'],
+        headerTokenValue: headerToken
       });
 
       return ApiResponse.error(res, 'CSRF token validation failed', 403);
