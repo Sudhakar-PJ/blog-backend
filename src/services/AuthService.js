@@ -8,7 +8,7 @@ const VerificationService = require("./VerificationService");
 const ApiError = require("../utils/ApiError");
 
 class AuthService {
-  async registerWithEmailPassword(email, username, password, deviceId) {
+  async register({ email, username, password, deviceId }) {
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
       throw new ApiError(409, "Email already registered");
@@ -42,7 +42,7 @@ class AuthService {
     return this.generateTokens(user, deviceId);
   }
 
-  async loginWithEmailPassword(email, password, deviceId) {
+  async login({ email, password, deviceId }) {
     const user = await UserRepository.findByEmail(email);
     if (!user) throw new ApiError(401, "Invalid credentials");
 
@@ -54,7 +54,6 @@ class AuthService {
       throw new ApiError(401, "Social account detected. Please login with Google or use 'Forgot Password' to create a local password.");
     }
 
-    console.log('LOCKOUT VAL:', user.lockout_until, new Date());
     if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
       const remainingTime = Math.ceil((new Date(user.lockout_until) - new Date()) / 60000);
       throw new ApiError(403, `Account temporarily locked. Please try again in ${remainingTime} minutes.`);
@@ -83,9 +82,13 @@ class AuthService {
         );
       }
 
+      const crypto = require('crypto');
+      const tempToken = crypto.randomBytes(32).toString('hex');
+      await redisClient.setex(`2fa_temp_token:${tempToken}`, 300, user.id);
+
       return {
         requires2FA: true,
-        userId: user.id,
+        tempToken,
         message: "SMS verification code sent",
       };
     }
@@ -111,7 +114,12 @@ class AuthService {
     return this.generateTokens(user, deviceId);
   }
 
-  async loginWith2FA(userId, code, deviceId) {
+  async verify2FALogin({ code, tempToken, deviceId }) {
+    const userId = await redisClient.get(`2fa_temp_token:${tempToken}`);
+    if (!userId) {
+      throw new ApiError(401, "Invalid or expired 2FA session");
+    }
+
     const storedCode = await redisClient.get(`2fa_code:${userId}`);
     if (!storedCode || storedCode !== code) {
       throw new ApiError(401, "Invalid or expired 2FA code");
@@ -125,18 +133,22 @@ class AuthService {
     }
 
     await redisClient.del(`2fa_code:${userId}`);
+    await redisClient.del(`2fa_temp_token:${tempToken}`);
+
     logger.info("User logged in via 2FA", { userId });
     return this.generateTokens(user, deviceId);
   }
 
-  async verifyEmailCode(userId, code) {
+  async verifyEmail(userId, code) {
     const storedCode = await redisClient.get(`email_verif_code:${userId}`);
     if (storedCode && storedCode === code) {
       await UserRepository.updateVerification(userId, "is_email_verified");
       await redisClient.del(`email_verif_code:${userId}`);
-      return true;
+      
+      const user = await UserRepository.findById(userId);
+      return this.sanitizeUser(user);
     }
-    return false;
+    throw new ApiError(400, "Invalid or expired verification code");
   }
 
   async googleAuthCallback(profile, deviceId) {
@@ -193,7 +205,7 @@ class AuthService {
     return this.generateTokens(user, deviceId);
   }
 
-  async refreshTokens(refreshToken, deviceId) {
+  async refresh({ refreshToken, deviceId }) {
     if (!refreshToken) throw new ApiError(400, "Refresh token missing");
     if (!deviceId) throw new ApiError(400, "Device ID missing");
 
@@ -224,7 +236,11 @@ class AuthService {
       throw new ApiError(403, `Your account has been suspended: ${user.suspension_reason || "Policy Violation"}`);
     }
 
-    return this.generateTokens(user, deviceId);
+    const tokens = this.generateTokens(user, deviceId);
+    return {
+      accessToken: tokens.accessToken,
+      newRefreshToken: tokens.refreshToken
+    };
   }
 
   generateTokens(user, deviceId) {

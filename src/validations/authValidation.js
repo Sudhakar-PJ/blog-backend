@@ -19,14 +19,13 @@ const login = {
 
 const verifyEmail = {
   body: Joi.object().keys({
-    userId: Joi.string().required().uuid(),
     code: Joi.string().required().length(6)
   })
 };
 
 const verify2FA = {
   body: Joi.object().keys({
-    userId: Joi.string().required().uuid(),
+    tempToken: Joi.string().required(),
     code: Joi.string().required().length(6)
   })
 };
