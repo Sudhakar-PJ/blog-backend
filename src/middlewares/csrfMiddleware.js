@@ -28,6 +28,9 @@ const csrfProtection = (req, res, next) => {
       });
   }
 
+  // Ensure the token is always sent in the header for the frontend to grab
+  res.setHeader('X-CSRF-Token', csrfToken);
+
   // 2. Protect mutation methods
   const protectedMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
   if (protectedMethods.includes(req.method)) {

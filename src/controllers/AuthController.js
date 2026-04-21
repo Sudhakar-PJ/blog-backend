@@ -68,7 +68,7 @@ class AuthController {
       this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
       
       if (isWebBrowser(req)) {
-        return ApiResponse.success(res, { user }, 201);
+        return ApiResponse.success(res, { user, csrfToken: req.cookies['csrf-token'] }, 201);
       } else {
         return ApiResponse.success(res, { user, accessToken, refreshToken }, 201);
       }
@@ -178,7 +178,7 @@ class AuthController {
       if (!user) {
         return ApiResponse.error(res, 'User not found', 401);
       }
-      return ApiResponse.success(res, { user: AuthService.sanitizeUser(user) });
+      return ApiResponse.success(res, { user: AuthService.sanitizeUser(user), csrfToken: req.cookies['csrf-token'] });
     } catch (error) {
       next(error);
     }
