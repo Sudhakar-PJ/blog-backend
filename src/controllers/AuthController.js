@@ -138,8 +138,14 @@ class AuthController {
     } catch (error) {
       if (error.statusCode === 401) {
         // Clear cookies if refresh token is dead
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
+        const cookieOptions = {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          partitioned: true
+        };
+        res.clearCookie('accessToken', cookieOptions);
+        res.clearCookie('refreshToken', cookieOptions);
       }
       next(error);
     }
@@ -209,8 +215,15 @@ class AuthController {
         }
       }
 
-      res.clearCookie('accessToken'); // Just in case any old ones remain
-      res.clearCookie('refreshToken');
+      const cookieOptions = {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        partitioned: true
+      };
+
+      res.clearCookie('accessToken', cookieOptions);
+      res.clearCookie('refreshToken', cookieOptions);
       // Intentionally not clearing deviceId so it persists for the next login on this physical device
       return ApiResponse.success(res, { message: 'Logged out successfully' });
     } catch (error) {
