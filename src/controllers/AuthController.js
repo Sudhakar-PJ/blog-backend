@@ -1,6 +1,10 @@
 const AuthService = require('../services/AuthService');
-const { isWebBrowser } = require('../utils/platformUtils');
+const UserRepository = require('../repositories/UserRepository');
 const ApiResponse = require('../utils/apiResponse');
+const { isWebBrowser } = require('../utils/platformUtils');
+const { logger } = require('../config/logger');
+const passport = require('../config/passport');
+const jwt = require('jsonwebtoken');
 
 class AuthController {
   constructor() {
@@ -13,66 +17,52 @@ class AuthController {
     this.verifyEmail = this.verifyEmail.bind(this);
     this.me = this.me.bind(this);
     this.logout = this.logout.bind(this);
-  }
-  _getOrGenerateDeviceId(req) {
-    const crypto = require('crypto');
-    let deviceId = req.cookies?.deviceId || req.body?.deviceId;
-    if (!deviceId) deviceId = crypto.randomUUID();
-    return deviceId;
+    this.forgotPassword = this.forgotPassword.bind(this);
   }
 
   _setAuthCookies(req, res, { accessToken, refreshToken, deviceId }) {
     const isBrowser = isWebBrowser(req);
     if (!isBrowser) return;
 
-    if (accessToken) {
-      res.cookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        partitioned: true,
-        maxAge: 15 * 60 * 1000 // 15 mins
-      });
-    }
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+      maxAge: 15 * 60 * 1000, // 15 mins
+    });
 
-    if (refreshToken) {
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        partitioned: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-      });
-    }
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
-    if (deviceId) {
-      res.cookie('deviceId', deviceId, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        partitioned: true,
-        maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
-      });
-    }
+    res.cookie('deviceId', deviceId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+    });
   }
 
   async register(req, res, next) {
     try {
-      const { email, username, password } = req.body;
-      if (!email || !username || !password) {
-        return ApiResponse.error(res, 'Username, email and password required', 400);
-      }
+      const { email, password, username } = req.body;
+      const deviceId = req.cookies?.deviceId || require('crypto').randomUUID();
       
-      const deviceId = this._getOrGenerateDeviceId(req);
-      const { user, accessToken, refreshToken } = await AuthService.registerWithEmailPassword(email, username, password, deviceId);
-      
+      const { user, accessToken, refreshToken } = await AuthService.register({
+        email,
+        password,
+        username,
+        deviceId,
+      });
+
       this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
-      
-      if (isWebBrowser(req)) {
-        return ApiResponse.success(res, { user, csrfToken: req.cookies['csrf-token'] }, 201);
-      } else {
-        return ApiResponse.success(res, { user, accessToken, refreshToken }, 201);
-      }
+      return ApiResponse.success(res, { user }, 201);
     } catch (error) {
       next(error);
     }
@@ -81,21 +71,24 @@ class AuthController {
   async login(req, res, next) {
     try {
       const { email, password } = req.body;
-      const deviceId = this._getOrGenerateDeviceId(req);
-      const result = await AuthService.loginWithEmailPassword(email, password, deviceId);
-      
+      const deviceId = req.cookies?.deviceId || require('crypto').randomUUID();
+
+      const result = await AuthService.login({ email, password, deviceId });
+
       if (result.requires2FA) {
-        return ApiResponse.success(res, result, 202); // 202 Accepted, waiting for code
+        return ApiResponse.success(res, { 
+          requires2FA: true, 
+          tempToken: result.tempToken 
+        }, 200, '2FA code required');
       }
 
-      const { user, accessToken, refreshToken } = result;
-      this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
+      this._setAuthCookies(req, res, { 
+        accessToken: result.accessToken, 
+        refreshToken: result.refreshToken, 
+        deviceId 
+      });
 
-      if (isWebBrowser(req)) {
-        return ApiResponse.success(res, { user });
-      } else {
-        return ApiResponse.success(res, { user, accessToken, refreshToken });
-      }
+      return ApiResponse.success(res, { user: result.user });
     } catch (error) {
       next(error);
     }
@@ -103,18 +96,17 @@ class AuthController {
 
   async verify2FALogin(req, res, next) {
     try {
-      const { userId, code } = req.body;
-      if (!userId || !code) return ApiResponse.error(res, 'Missing 2FA payload', 400);
+      const { code, tempToken } = req.body;
+      const deviceId = req.cookies?.deviceId || require('crypto').randomUUID();
 
-      const deviceId = this._getOrGenerateDeviceId(req);
-      const { user, accessToken, refreshToken } = await AuthService.loginWith2FA(userId, code, deviceId);
+      const { user, accessToken, refreshToken } = await AuthService.verify2FALogin({
+        code,
+        tempToken,
+        deviceId,
+      });
+
       this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
-
-      if (isWebBrowser(req)) {
-        return ApiResponse.success(res, { user });
-      } else {
-        return ApiResponse.success(res, { user, accessToken, refreshToken });
-      }
+      return ApiResponse.success(res, { user });
     } catch (error) {
       next(error);
     }
@@ -122,32 +114,29 @@ class AuthController {
 
   async refresh(req, res, next) {
     try {
-      const { refreshToken } = req.cookies;
-      if (!refreshToken) {
-        return ApiResponse.error(res, 'Refresh token required', 401);
+      const refreshToken = req.cookies?.refreshToken;
+      const deviceId = req.cookies?.deviceId;
+
+      if (!refreshToken || !deviceId) {
+        return ApiResponse.error(res, 'Refresh token or device ID missing', 401);
       }
 
-      const deviceId = this._getOrGenerateDeviceId(req);
-      const { user, accessToken, refreshToken: newRefreshToken } = await AuthService.refreshTokens(refreshToken, deviceId);
-      this._setAuthCookies(req, res, { accessToken, refreshToken: newRefreshToken, deviceId });
+      const { accessToken, newRefreshToken } = await AuthService.refresh({
+        refreshToken,
+        deviceId,
+      });
 
-      if (isWebBrowser(req)) {
-        return ApiResponse.success(res, { user });
-      } else {
-        return ApiResponse.success(res, { user, accessToken, refreshToken: newRefreshToken });
-      }
+      this._setAuthCookies(req, res, { 
+        accessToken, 
+        refreshToken: newRefreshToken, 
+        deviceId 
+      });
+      
+      return ApiResponse.success(res, { success: true });
     } catch (error) {
-      if (error.statusCode === 401) {
-        // Clear cookies if refresh token is dead
-        const cookieOptions = {
-          httpOnly: true,
-          secure: true,
-          sameSite: 'none',
-          partitioned: true
-        };
-        res.clearCookie('accessToken', cookieOptions);
-        res.clearCookie('refreshToken', cookieOptions);
-      }
+      // If refresh fails, clear cookies to force re-login
+      res.clearCookie('accessToken', { sameSite: 'none', secure: true, partitioned: true });
+      res.clearCookie('refreshToken', { sameSite: 'none', secure: true, partitioned: true });
       next(error);
     }
   }
@@ -159,15 +148,15 @@ class AuthController {
       const exchangeCode = crypto.randomBytes(32).toString('hex');
       
       const redisClient = require('../config/redis');
-      // Store the auth payload for 5 minutes
       await redisClient.setex(`auth_exchange:${exchangeCode}`, 300, JSON.stringify({
         accessToken, refreshToken, deviceId
       }));
 
-      // Redirect to frontend with the temporary code
       const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
+      logger.info(`Google callback successful. Redirecting to frontend with code for device: ${deviceId}`);
       res.redirect(`${frontendUrl}/auth/success?code=${exchangeCode}`);
     } catch (error) {
+      logger.error('Google callback error:', error);
       next(error);
     }
   }
@@ -175,40 +164,45 @@ class AuthController {
   async googleExchange(req, res, next) {
     try {
       const { code } = req.body;
+      logger.info(`Received exchange request for code: ${code?.substring(0, 5)}...`);
+      
       if (!code) return ApiResponse.error(res, 'Exchange code required', 400);
 
       const redisClient = require('../config/redis');
       const data = await redisClient.get(`auth_exchange:${code}`);
-      if (!data) return ApiResponse.error(res, 'Invalid or expired exchange code', 401);
+      
+      if (!data) {
+        logger.warn('Exchange code not found in Redis or expired');
+        return ApiResponse.error(res, 'Invalid or expired exchange code', 401);
+      }
 
       const { accessToken, refreshToken, deviceId } = JSON.parse(data);
       await redisClient.del(`auth_exchange:${code}`);
 
-      // Now set the cookies. Since this is an AJAX call from the frontend,
-      // the browser will correctly partition these cookies for the frontend domain!
       this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
 
-      // Fetch user to return in response
-      const jwt = require('jsonwebtoken');
       const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET);
-      const UserRepository = require('../repositories/UserRepository');
       const user = await UserRepository.findById(decoded.id);
 
+      logger.info(`Exchange successful for user: ${user?.email}`);
       return ApiResponse.success(res, { user: AuthService.sanitizeUser(user) });
     } catch (error) {
+      logger.error('Google exchange error:', error);
       next(error);
     }
   }
 
   async verifyEmail(req, res, next) {
     try {
-      const { userId, code } = req.body;
-      const success = await AuthService.verifyEmailCode(userId, code);
-      if (success) {
-        return ApiResponse.success(res, { message: 'Email verified successfully' });
-      } else {
-        return ApiResponse.error(res, 'Invalid or expired code', 400);
-      }
+      const { code } = req.body;
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return ApiResponse.error(res, 'Missing access token', 401);
+      
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+
+      const user = await AuthService.verifyEmail(decoded.id, code);
+      return ApiResponse.success(res, { user });
     } catch (error) {
       next(error);
     }
@@ -216,12 +210,8 @@ class AuthController {
 
   async me(req, res, next) {
     try {
-      const UserRepository = require('../repositories/UserRepository');
       const user = await UserRepository.findById(req.user.id);
-      if (!user) {
-        return ApiResponse.error(res, 'User not found', 401);
-      }
-      return ApiResponse.success(res, { user: AuthService.sanitizeUser(user), csrfToken: req.cookies['csrf-token'] });
+      return ApiResponse.success(res, { user: AuthService.sanitizeUser(user) });
     } catch (error) {
       next(error);
     }
@@ -229,40 +219,27 @@ class AuthController {
 
   async logout(req, res, next) {
     try {
-      // Clean up Redis server-side memory if possible
-      const { refreshToken, deviceId } = req.cookies;
-      const { allDevices } = req.body;
+      const deviceId = req.cookies?.deviceId;
+      const allDevices = req.body?.allDevices === true;
 
-      if (refreshToken) {
-        try {
-          const jwt = require('jsonwebtoken');
-          const redisClient = require('../config/redis');
-          const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-          
-          if (allDevices) {
-            await AuthService.logoutAllDevices(decoded.id);
-          } else if (deviceId) {
-            await redisClient.del(`refresh_token:${decoded.id}:${deviceId}`);
-          } else {
-            // fallback if using old keys without deviceId
-            await redisClient.del(`refresh_token:${decoded.id}`);
-          }
-        } catch (err) {
-          // Quietly fail if token is already expired/invalid
-        }
+      if (deviceId) {
+        await AuthService.logout(req.user.id, deviceId, allDevices);
       }
 
+      // Explicitly clear cookies with production-grade attributes
       const cookieOptions = {
         httpOnly: true,
         secure: true,
         sameSite: 'none',
-        partitioned: true
+        partitioned: true,
+        path: '/'
       };
 
       res.clearCookie('accessToken', cookieOptions);
       res.clearCookie('refreshToken', cookieOptions);
-      // Intentionally not clearing deviceId so it persists for the next login on this physical device
-      return ApiResponse.success(res, { message: 'Logged out successfully' });
+      // We keep deviceId to maintain tracking across sessions unless user explicitly clears it
+      
+      return ApiResponse.success(res, null, 200, 'Logged out successfully');
     } catch (error) {
       next(error);
     }
@@ -271,9 +248,8 @@ class AuthController {
   async forgotPassword(req, res, next) {
     try {
       const { email } = req.body;
-      if (!email) return ApiResponse.error(res, 'Email is required', 400);
-      const result = await AuthService.forgotPassword(email);
-      return ApiResponse.success(res, result);
+      await AuthService.forgotPassword(email);
+      return ApiResponse.success(res, null, 200, 'Password reset instructions sent');
     } catch (error) {
       next(error);
     }
