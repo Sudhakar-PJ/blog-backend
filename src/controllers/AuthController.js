@@ -9,6 +9,7 @@ class AuthController {
     this.verify2FALogin = this.verify2FALogin.bind(this);
     this.refresh = this.refresh.bind(this);
     this.googleCallback = this.googleCallback.bind(this);
+    this.googleExchange = this.googleExchange.bind(this);
     this.verifyEmail = this.verifyEmail.bind(this);
     this.me = this.me.bind(this);
     this.logout = this.logout.bind(this);
@@ -153,11 +154,47 @@ class AuthController {
 
   async googleCallback(req, res, next) {
     try {
-      const { user, accessToken, refreshToken, deviceId } = req.user;
-      this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
-      // Redirect to frontend upon success
+      const { accessToken, refreshToken, deviceId } = req.user;
+      const crypto = require('crypto');
+      const exchangeCode = crypto.randomBytes(32).toString('hex');
+      
+      const redisClient = require('../config/redis');
+      // Store the auth payload for 5 minutes
+      await redisClient.setex(`auth_exchange:${exchangeCode}`, 300, JSON.stringify({
+        accessToken, refreshToken, deviceId
+      }));
+
+      // Redirect to frontend with the temporary code
       const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/feed`);
+      res.redirect(`${frontendUrl}/auth/success?code=${exchangeCode}`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async googleExchange(req, res, next) {
+    try {
+      const { code } = req.body;
+      if (!code) return ApiResponse.error(res, 'Exchange code required', 400);
+
+      const redisClient = require('../config/redis');
+      const data = await redisClient.get(`auth_exchange:${code}`);
+      if (!data) return ApiResponse.error(res, 'Invalid or expired exchange code', 401);
+
+      const { accessToken, refreshToken, deviceId } = JSON.parse(data);
+      await redisClient.del(`auth_exchange:${code}`);
+
+      // Now set the cookies. Since this is an AJAX call from the frontend,
+      // the browser will correctly partition these cookies for the frontend domain!
+      this._setAuthCookies(req, res, { accessToken, refreshToken, deviceId });
+
+      // Fetch user to return in response
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET);
+      const UserRepository = require('../repositories/UserRepository');
+      const user = await UserRepository.findById(decoded.id);
+
+      return ApiResponse.success(res, { user: AuthService.sanitizeUser(user) });
     } catch (error) {
       next(error);
     }

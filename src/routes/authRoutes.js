@@ -160,6 +160,7 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
  *       200: { description: OAuth successful, sets cookies }
  */
 router.get('/google/callback', passport.authenticate('google', { session: false }), AuthController.googleCallback);
+router.post('/google/exchange', AuthController.googleExchange);
 
 /**
  * @swagger
