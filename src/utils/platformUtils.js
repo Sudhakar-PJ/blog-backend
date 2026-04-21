@@ -20,7 +20,7 @@ const isWebBrowser = (req) => {
   }
 
   // 3. Presence of Origin or Referer usually indicates a browser for cross-origin or same-site AJAX
-  if (req.headers['origin'] || req.headers['referer']) {
+  if (req.headers['origin'] || req.headers['referer'] || req.headers['user-agent']?.includes('Mozilla')) {
     return true;
   }
 
